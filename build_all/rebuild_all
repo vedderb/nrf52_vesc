@@ -1,0 +1,33 @@
+#!/bin/bash
+
+set -e
+
+FWPATH="../"
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+cd $FWPATH
+make clean
+make -j8 IS_52832=0
+make IS_52832=0 merge_hex
+cd $DIR
+cp $FWPATH/hex/merged.bin nrf52840_vesc_ble_rx11_tx8_led7.bin
+
+cd $FWPATH
+make clean
+make -j8 IS_52832=1 build_args='-DMODULE_BUILTIN=0'
+make IS_52832=1 merge_hex
+cd $DIR
+cp $FWPATH/hex/merged.bin nrf52832_vesc_ble_rx7_tx6_led8.bin
+
+cd $FWPATH
+make clean
+make -j8 IS_52832=1 build_args='-DMODULE_BUILTIN=1'
+make IS_52832=1 merge_hex
+cd $DIR
+cp $FWPATH/hex/merged.bin nrf52832_vesc_ble_rx6_tx7_led8.bin
+
+# Clean
+cd $FWPATH
+make clean
+cd $DIR
+
