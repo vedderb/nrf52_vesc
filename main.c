@@ -38,6 +38,7 @@
 #include "app_util_platform.h"
 #include "nrf_pwr_mgmt.h"
 #include "bsp_btn_ble.h"
+#include "nrf_delay.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -64,13 +65,17 @@
 #include "crc.h"
 
 #ifndef MODULE_BUILTIN
-#define MODULE_BUILTIN					0
+#define MODULE_BUILTIN					1
 #endif
 
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
 #ifdef NRF52840_XXAA
-#define DEVICE_NAME                     "VESC 52840"
+#if MODULE_BUILTIN
+#define DEVICE_NAME                     "VESC 52840 BUILTIN"
+#else
+#define DEVICE_NAME                     "VESC 52840 UART"
+#endif
 #else
 #if MODULE_BUILTIN
 #define DEVICE_NAME                     "VESC 52832 BUILTIN"
@@ -98,8 +103,8 @@
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #ifdef NRF52840_XXAA
-#define UART_TX_BUF_SIZE                2048
-#define UART_RX_BUF_SIZE                32768
+#define UART_TX_BUF_SIZE                16384
+#define UART_RX_BUF_SIZE                16384
 #else
 #define UART_TX_BUF_SIZE                2048
 #define UART_RX_BUF_SIZE                8192
@@ -109,10 +114,17 @@
 #define PACKET_BLE						1
 
 #ifdef NRF52840_XXAA
+#if MODULE_BUILTIN
+#define UART_RX							26
+#define UART_TX							25
+#define UART_TX_DISABLED				28
+#define LED_PIN							27
+#else
 #define UART_RX							11
 #define UART_TX							8
 #define UART_TX_DISABLED				25
 #define LED_PIN							7
+#endif
 #else
 #if MODULE_BUILTIN
 #define UART_RX							6
@@ -144,9 +156,9 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 {
 		{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}
 };
-static bool								m_is_enabled = true;
-static bool								m_uart_error = false;
-static int								m_other_comm_disable_time = 0;
+static volatile bool					m_is_enabled = true;
+static volatile bool					m_uart_error = false;
+static volatile int						m_other_comm_disable_time = 0;
 
 app_uart_comm_params_t m_uart_comm_params =
 {
@@ -485,14 +497,11 @@ void uart_event_handle(app_uart_evt_t * p_event) {
 	} break;
 
 	case APP_UART_COMMUNICATION_ERROR:
-//		APP_ERROR_HANDLER(p_event->data.error_communication);
-		m_uart_error = true;
+//		m_uart_error = true;
 		break;
 
 	case APP_UART_FIFO_ERROR:
-//		APP_ERROR_HANDLER(p_event->data.error_code);
-		app_uart_flush();
-		packet_reset(PACKET_VESC);
+//		m_uart_error = true;
 		break;
 
 	default:
@@ -577,11 +586,11 @@ static void ble_send_buffer(unsigned char *data, unsigned int len) {
 				break;
 			}
 
-			uint16_t max_len = BLE_NUS_MAX_DATA_LEN;
+			uint16_t max_len = m_ble_nus_max_data_len;
 			uint16_t tmp_len = len > max_len ? max_len : len;
 			err_code = ble_nus_data_send(&m_nus, data + ind, &tmp_len, m_conn_handle);
 
-			if (err_code != NRF_ERROR_RESOURCES) {
+			if (err_code != NRF_ERROR_RESOURCES && err_code != NRF_ERROR_BUSY) {
 				len -= tmp_len;
 				ind += tmp_len;
 			}

@@ -1,5 +1,5 @@
 # Compile for NRF52832, otherwise for NRF52840
-IS_52832 ?= 1
+IS_52832 ?= 0
 
 PROJECT_NAME     := vesc_ble_uart
 OUTPUT_DIRECTORY := _build
