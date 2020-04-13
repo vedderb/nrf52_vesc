@@ -77,9 +77,9 @@
 #ifdef NRF52840_XXAA
 #if MODULE_BUILTIN
 #define DEVICE_NAME                     "VESC 52840 BUILTIN"
-#elif defined(MODULE_RD2)
+#elif MODULE_RD2
 #define DEVICE_NAME                     "VESC RAD2"
-#elif defined(MODULE_STORMCORE)
+#elif MODULE_STORMCORE
 #define DEVICE_NAME                     "STORMCORE"
 #else
 #define DEVICE_NAME                     "VESC 52840 UART"
@@ -127,15 +127,15 @@
 #define UART_TX							25
 #define UART_TX_DISABLED				28
 #define LED_PIN							27
-#elif defined(MODULE_RD2)
+#elif MODULE_RD2
 #define UART_RX							11
 #define UART_TX							12
 #define UART_TX_DISABLED				18
 #define LED_PIN							15
-#elif defined(MODULE_STORMCORE)
-#define UART_RX							30
-#define UART_TX							31
-#define UART_TX_DISABLED				2
+#elif MODULE_STORMCORE
+#define UART_RX							31
+#define UART_TX							30
+#define UART_TX_DISABLED				29
 #define LED_PIN							5
 #else
 #define UART_RX							11
