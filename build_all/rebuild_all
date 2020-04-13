@@ -21,6 +21,13 @@ cp $FWPATH/hex/merged.bin nrf52840_vesc_ble_rx26_tx25_led27.bin
 
 cd $FWPATH
 make clean
+make -j8 IS_52832=0 build_args='-DMODULE_STORMCORE=1'
+make IS_52832=0 merge_hex
+cd $DIR
+cp $FWPATH/hex/merged.bin nrf52840_stormcore_ble_rx30_tx31_led5.bin
+
+cd $FWPATH
+make clean
 make -j8 IS_52832=1 build_args='-DMODULE_BUILTIN=0'
 make IS_52832=1 merge_hex
 cd $DIR

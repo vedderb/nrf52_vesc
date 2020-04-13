@@ -79,6 +79,8 @@
 #define DEVICE_NAME                     "VESC 52840 BUILTIN"
 #elif defined(MODULE_RD2)
 #define DEVICE_NAME                     "VESC RAD2"
+#elif defined(MODULE_STORMCORE)
+#define DEVICE_NAME                     "STORMCORE"
 #else
 #define DEVICE_NAME                     "VESC 52840 UART"
 #endif
@@ -130,6 +132,11 @@
 #define UART_TX							12
 #define UART_TX_DISABLED				18
 #define LED_PIN							15
+#elif defined(MODULE_STORMCORE)
+#define UART_RX							30
+#define UART_TX							31
+#define UART_TX_DISABLED				2
+#define LED_PIN							5
 #else
 #define UART_RX							11
 #define UART_TX							8
