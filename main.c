@@ -72,7 +72,12 @@
 #define MODULE_RD2						0
 #endif
 
-#define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
+#ifndef MODULE_RD_BMS
+#define MODULE_RD_BMS					0
+#endif
+
+#define USE_SLEEP						1
+#define USE_USB							0
 
 #ifdef NRF52840_XXAA
 #if MODULE_BUILTIN
@@ -81,6 +86,8 @@
 #define DEVICE_NAME                     "VESC RAD2"
 #elif MODULE_STORMCORE
 #define DEVICE_NAME                     "STORMCORE"
+#elif MODULE_RD_BMS
+#define DEVICE_NAME                     "VESC RBAT BMS"
 #else
 #define DEVICE_NAME                     "VESC 52840 UART"
 #endif
@@ -92,13 +99,14 @@
 #endif
 #endif
 
+#define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
+
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-
-#define APP_ADV_DURATION                18000                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
+#define APP_ADV_DURATION                100                                         /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(15, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(30, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -121,6 +129,9 @@
 #define PACKET_VESC						0
 #define PACKET_BLE						1
 
+#define LED_ON()						nrf_gpio_pin_set(LED_PIN)
+#define LED_OFF()						nrf_gpio_pin_clear(LED_PIN)
+
 #ifdef NRF52840_XXAA
 #if MODULE_BUILTIN
 #define UART_RX							26
@@ -137,6 +148,15 @@
 #define UART_TX							30
 #define UART_TX_DISABLED				29
 #define LED_PIN							5
+#elif MODULE_RD_BMS
+#define UART_RX							4
+#define UART_TX							5
+#define UART_TX_DISABLED				2
+#define LED_PIN							NRF_GPIO_PIN_MAP(1, 5)
+#undef LED_ON
+#undef LED_OFF
+#define LED_ON()						nrf_gpio_pin_set(NRF_GPIO_PIN_MAP(1, 1)); nrf_gpio_pin_clear(LED_PIN)
+#define LED_OFF()						nrf_gpio_pin_set(LED_PIN)
 #else
 #define UART_RX							11
 #define UART_TX							8
@@ -174,9 +194,12 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 {
 		{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}
 };
-static volatile bool					m_is_enabled = true;
-static volatile bool					m_uart_error = false;
-static volatile int						m_other_comm_disable_time = 0;
+
+static volatile bool m_is_enabled = true;
+static volatile bool m_uart_error = false;
+static volatile int m_other_comm_disable_time = 0;
+static volatile int m_no_sleep_cnt = 0;
+static volatile int m_disconnect_cnt = 0;
 
 app_uart_comm_params_t m_uart_comm_params =
 {
@@ -196,8 +219,9 @@ app_uart_comm_params_t m_uart_comm_params =
 // Functions
 void ble_printf(const char* format, ...);
 static void set_enabled(bool en);
+static void go_to_sleep(void);
 
-#ifdef NRF52840_XXAA
+#if defined(NRF52840_XXAA) && USE_USB
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 		app_usbd_cdc_acm_user_event_t event);
 
@@ -405,14 +429,22 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 //		bsp_indication_set(BSP_INDICATE_ADVERTISING);
 		break;
 	case BLE_ADV_EVT_IDLE:
-//		sleep_mode_enter();
+#if USE_SLEEP
+		if (m_no_sleep_cnt) {
+			m_no_sleep_cnt--;
+			start_advertising();
+		} else {
+			go_to_sleep();
+		}
+#else
+		(void)go_to_sleep();
 		start_advertising();
+#endif
 		break;
 	default:
 		break;
 	}
 }
-
 
 /**@brief Function for handling BLE events.
  *
@@ -422,15 +454,16 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 	switch (p_ble_evt->header.evt_id) {
 	case BLE_GAP_EVT_CONNECTED:
-		nrf_gpio_pin_set(LED_PIN);
+		LED_ON();
 		m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
 		nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
 		sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_CONN, m_conn_handle, 8);
 		break;
 
 	case BLE_GAP_EVT_DISCONNECTED:
-		nrf_gpio_pin_clear(LED_PIN);
+		LED_OFF();
 		m_conn_handle = BLE_CONN_HANDLE_INVALID;
+		m_disconnect_cnt = 100;
 		break;
 
 	case BLE_GAP_EVT_PHY_UPDATE_REQUEST: {
@@ -624,6 +657,8 @@ static void process_packet_ble(unsigned char *data, unsigned int len) {
 		m_other_comm_disable_time = 5000;
 	}
 
+	m_no_sleep_cnt = 20;
+
 	CRITICAL_REGION_ENTER();
 	packet_send_packet(data, len, PACKET_VESC);
 	CRITICAL_REGION_EXIT();
@@ -659,7 +694,7 @@ void ble_printf(const char* format, ...) {
 }
 
 void cdc_printf(const char* format, ...) {
-#ifdef NRF52840_XXAA
+#if defined(NRF52840_XXAA) && USE_USB
 	va_list arg;
 	va_start (arg, format);
 	int len;
@@ -686,6 +721,8 @@ static void esb_timeslot_data_handler(void *p_data, uint16_t length) {
 		packet_send_packet(buffer, length + 1, PACKET_VESC);
 		CRITICAL_REGION_EXIT();
 	}
+
+	m_no_sleep_cnt = 20;
 }
 
 static void packet_timer_handler(void *p_context) {
@@ -702,6 +739,22 @@ static void packet_timer_handler(void *p_context) {
 static void nrf_timer_handler(void *p_context) {
 	(void)p_context;
 
+#if USE_SLEEP
+	// If BLE just disconnected this packet is sent at a higher rate for 10 seconds. The reason
+	// is that the disconnect might have happened because the connected VESC or VESC BMS was
+	// sleeping and didn't respond. This higher rate gives it a change to wake up on UART events
+	// so that the next connect works.
+	// TODO: Maybe this should be handled from VESC Tool by trying for longer?
+	if (m_disconnect_cnt) {
+		m_disconnect_cnt--;
+		app_timer_start(m_nrf_timer, APP_TIMER_TICKS(100), NULL);
+	} else {
+		app_timer_start(m_nrf_timer, APP_TIMER_TICKS(1000), NULL);
+	}
+#else
+	app_timer_start(m_nrf_timer, APP_TIMER_TICKS(1000), NULL);
+#endif
+
 	if (m_other_comm_disable_time == 0) {
 		uint8_t buffer[1];
 		buffer[0] = COMM_EXT_NRF_PRESENT;
@@ -711,12 +764,64 @@ static void nrf_timer_handler(void *p_context) {
 	}
 
 	cdc_printf("Test\r\n");
+
+	// Reload watchdog
+	NRF_WDT->RR[0] = WDT_RR_RR_Reload;
+}
+
+static void go_to_sleep(void) {
+	app_uart_close();
+	app_timer_stop_all();
+	esb_timeslot_sd_stop();
+
+	nrf_gpio_cfg_default(LED_PIN);
+	nrf_gpio_cfg_default(UART_RX);
+	nrf_gpio_cfg_default(UART_TX);
+
+	// Workaround current consumption issue by power cycling the UART peripherals
+	// https://devzone.nordicsemi.com/f/nordic-q-a/42883/current-consumption-when-using-timer-and-scheduler-alongwith-nrf_pwr_mgmt_run/167545#167545
+	*(volatile uint32_t *)0x40002FFC = 0;   // Power down UARTE0
+	*(volatile uint32_t *)0x40002FFC;       //
+	*(volatile uint32_t *)0x40002FFC = 1;   // Power on UARTE0 so it is ready for next time
+
+	*(volatile uint32_t *)0x40028FFC = 0;   // Power down UARTE1
+	*(volatile uint32_t *)0x40028FFC;       //
+	*(volatile uint32_t *)0x40028FFC = 1;   // Power on UARTE1 so it is ready for next time
+
+#ifdef MODULE_RD_BMS
+	nrf_gpio_pin_clear(NRF_GPIO_PIN_MAP(1, 1));
+#endif
+
+	if (nrf_sdh_is_enabled()) {
+		nrf_sdh_disable_request();
+		while (nrf_sdh_is_enabled()) {}
+	}
+
+	// The watchdog will wake up the CPU. Then we reset and start
+	// advertising ble again.
+
+	__set_FPSCR(__get_FPSCR()  & ~(0x0000009F));
+	(void)__get_FPSCR();
+	NVIC_ClearPendingIRQ(FPU_IRQn);
+
+	__SEV();
+	__WFE();
+	__WFE();
+	NVIC_SystemReset();
 }
 
 int main(void) {
 	nrf_gpio_cfg_output(LED_PIN);
 
-#ifdef NRF52840_XXAA
+#ifdef MODULE_RD_BMS
+	nrf_gpio_cfg_output(NRF_GPIO_PIN_MAP(1, 1));
+	LED_ON();
+	nrf_delay_ms(5);
+	nrf_gpio_pin_clear(NRF_GPIO_PIN_MAP(1, 1));
+	LED_OFF();
+#endif
+
+#if defined(NRF52840_XXAA) && USE_USB
 	nrf_drv_clock_init();
 
 	static const app_usbd_config_t usbd_config = {
@@ -728,6 +833,12 @@ int main(void) {
 	app_usbd_class_inst_t const * class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
 	app_usbd_class_append(class_cdc_acm);
 #endif
+
+	// Watchdog
+	NRF_WDT->CONFIG = (WDT_CONFIG_HALT_Pause << WDT_CONFIG_HALT_Pos) | ( WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos);
+	NRF_WDT->CRV = 5 * 32768; // 5s timout
+	NRF_WDT->RREN |= WDT_RREN_RR0_Msk;
+	NRF_WDT->TASKS_START = 1;
 
 	uart_init();
 	app_timer_init();
@@ -747,20 +858,20 @@ int main(void) {
 	app_timer_create(&m_packet_timer, APP_TIMER_MODE_REPEATED, packet_timer_handler);
 	app_timer_start(m_packet_timer, APP_TIMER_TICKS(1), NULL);
 
-	app_timer_create(&m_nrf_timer, APP_TIMER_MODE_REPEATED, nrf_timer_handler);
-	app_timer_start(m_nrf_timer, APP_TIMER_TICKS(1000), NULL);
+	app_timer_create(&m_nrf_timer, APP_TIMER_MODE_SINGLE_SHOT, nrf_timer_handler);
+	app_timer_start(m_nrf_timer, APP_TIMER_TICKS(1200), NULL);
 
 	esb_timeslot_init(esb_timeslot_data_handler);
 	esb_timeslot_sd_start();
 
-#ifdef NRF52840_XXAA
+#if defined(NRF52840_XXAA) && USE_USB
 	app_usbd_power_events_enable();
 #endif
 
 	start_advertising();
 
 	for (;;) {
-#ifdef NRF52840_XXAA
+#if defined(NRF52840_XXAA) && USE_USB
 		while (app_usbd_event_queue_process()){}
 #endif
 
@@ -776,6 +887,13 @@ int main(void) {
 			packet_process_byte(byte, PACKET_VESC);
 		}
 
+		// https://devzone.nordicsemi.com/f/nordic-q-a/15243/high-power-consumption-when-using-fpu
+		__set_FPSCR(__get_FPSCR()  & ~(0x0000009F));
+		(void)__get_FPSCR();
+		NVIC_ClearPendingIRQ(FPU_IRQn);
 		sd_app_evt_wait();
+
+		// Reload watchdog
+		NRF_WDT->RR[0] = WDT_RR_RR_Reload;
 	}
 }
