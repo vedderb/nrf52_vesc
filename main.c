@@ -76,7 +76,7 @@
 #define MODULE_RD_BMS					0
 #endif
 
-#define USE_SLEEP						1
+#define USE_SLEEP						0
 #define USE_USB							0
 
 #ifdef NRF52840_XXAA
@@ -170,6 +170,7 @@
 #define UART_TX_DISABLED				25
 #define EN_DEFAULT						1
 #define LED_PIN							8
+#define LED_PIN2_INV					5
 #else
 #define UART_RX							7
 #define UART_TX							6
@@ -177,6 +178,14 @@
 #define EN_DEFAULT						1
 #define LED_PIN							8
 #endif
+#endif
+
+// Alternative inverted LED pin
+#ifdef LED_PIN2_INV
+#undef LED_ON
+#undef LED_OFF
+#define LED_ON()						nrf_gpio_pin_set(LED_PIN); nrf_gpio_pin_clear(LED_PIN2_INV)
+#define LED_OFF()						nrf_gpio_pin_clear(LED_PIN); nrf_gpio_pin_set(LED_PIN2_INV)
 #endif
 
 // Private variables
