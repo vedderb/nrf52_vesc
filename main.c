@@ -228,7 +228,9 @@ app_uart_comm_params_t m_uart_comm_params =
 // Functions
 void ble_printf(const char* format, ...);
 static void set_enabled(bool en);
+#if USE_SLEEP
 static void go_to_sleep(void);
+#endif
 
 #if defined(NRF52840_XXAA) && USE_USB
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
@@ -446,7 +448,6 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 			go_to_sleep();
 		}
 #else
-		(void)go_to_sleep();
 		start_advertising();
 #endif
 		break;
@@ -778,6 +779,7 @@ static void nrf_timer_handler(void *p_context) {
 	NRF_WDT->RR[0] = WDT_RR_RR_Reload;
 }
 
+#if USE_SLEEP
 static void go_to_sleep(void) {
 	app_uart_close();
 	app_timer_stop_all();
@@ -786,6 +788,10 @@ static void go_to_sleep(void) {
 	nrf_gpio_cfg_default(LED_PIN);
 	nrf_gpio_cfg_default(UART_RX);
 	nrf_gpio_cfg_default(UART_TX);
+
+#ifdef LED_PIN2_INV
+	nrf_gpio_cfg_default(LED_PIN2_INV);
+#endif
 
 	// Workaround current consumption issue by power cycling the UART peripherals
 	// https://devzone.nordicsemi.com/f/nordic-q-a/42883/current-consumption-when-using-timer-and-scheduler-alongwith-nrf_pwr_mgmt_run/167545#167545
@@ -818,11 +824,16 @@ static void go_to_sleep(void) {
 	__WFE();
 	NVIC_SystemReset();
 }
+#endif
 
 int main(void) {
 	nrf_gpio_cfg_output(LED_PIN);
 
-#ifdef MODULE_RD_BMS
+#ifdef LED_PIN2_INV
+	nrf_gpio_cfg_output(LED_PIN2_INV);
+#endif
+
+#if MODULE_RD_BMS
 	nrf_gpio_cfg_output(NRF_GPIO_PIN_MAP(1, 1));
 	LED_ON();
 	nrf_delay_ms(5);
