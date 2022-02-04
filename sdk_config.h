@@ -80,7 +80,7 @@
  
 
 #ifndef BLE_RACP_ENABLED
-#define BLE_RACP_ENABLED 0
+#define BLE_RACP_ENABLED 1
 #endif
 
 // <e> NRF_BLE_CONN_PARAMS_ENABLED - ble_conn_params - Initiating and executing a connection parameters negotiation procedure
@@ -111,6 +111,10 @@
 #define NRF_BLE_GATT_ENABLED 1
 #endif
 
+#ifndef NRF_BLE_LESC_ENABLED
+#define NRF_BLE_LESC_ENABLED 1
+#endif
+
 // <e> NRF_BLE_QWR_ENABLED - nrf_ble_qwr - Queued writes support module (prepare/execute write)
 //==========================================================
 #ifndef NRF_BLE_QWR_ENABLED
@@ -126,7 +130,7 @@
 // <e> PEER_MANAGER_ENABLED - peer_manager - Peer Manager
 //==========================================================
 #ifndef PEER_MANAGER_ENABLED
-#define PEER_MANAGER_ENABLED 0
+#define PEER_MANAGER_ENABLED 1
 #endif
 // <o> PM_MAX_REGISTRANTS - Number of event handlers that can be registered. 
 #ifndef PM_MAX_REGISTRANTS
@@ -146,7 +150,7 @@
 // <i> Enable/disable central-specific Peer Manager functionality.
 
 #ifndef PM_CENTRAL_ENABLED
-#define PM_CENTRAL_ENABLED 1
+#define PM_CENTRAL_ENABLED 0
 #endif
 
 // <q> PM_SERVICE_CHANGED_ENABLED  - Enable/disable the service changed management for GATT server in Peer Manager.
@@ -174,7 +178,7 @@
 // <i> If set to true, you need to call nrf_ble_lesc_request_handler() in the main loop to respond to LESC-related BLE events. If LESC support is not required, set this to false to save code space.
 
 #ifndef PM_LESC_ENABLED
-#define PM_LESC_ENABLED 0
+#define PM_LESC_ENABLED 1
 #endif
 
 // <e> PM_RA_PROTECTION_ENABLED - Enable/disable protection against repeated pairing attempts in Peer Manager.
@@ -210,7 +214,7 @@
 // <i>  This might be necessary for interoperability reasons, especially as peripheral.
 
 #ifndef PM_HANDLER_SEC_DELAY_MS
-#define PM_HANDLER_SEC_DELAY_MS 0
+#define PM_HANDLER_SEC_DELAY_MS 400
 #endif
 
 // </e>
@@ -318,7 +322,7 @@
  
 
 #ifndef BLE_DIS_ENABLED
-#define BLE_DIS_ENABLED 0
+#define BLE_DIS_ENABLED 1
 #endif
 
 // <q> BLE_GLS_ENABLED  - ble_gls - Glucose Service
@@ -1129,7 +1133,7 @@
 // <i> The nRF HW backend provide access to RNG peripheral in nRF5x devices.
 //==========================================================
 #ifndef NRF_CRYPTO_BACKEND_NRF_HW_RNG_ENABLED
-#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_ENABLED 0
+#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_ENABLED 1
 #endif
 // <q> NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED  - Enable mbed TLS CTR-DRBG algorithm.
  
@@ -1137,7 +1141,7 @@
 // <i> Enable mbed TLS CTR-DRBG standardized by NIST (NIST SP 800-90A Rev. 1). The nRF HW RNG is used as an entropy source for seeding.
 
 #ifndef NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED
-#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED 1
+#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED 0
 #endif
 
 // </e>
@@ -1165,7 +1169,7 @@
 // <i> The Oberon backend
 //==========================================================
 #ifndef NRF_CRYPTO_BACKEND_OBERON_ENABLED
-#define NRF_CRYPTO_BACKEND_OBERON_ENABLED 0
+#define NRF_CRYPTO_BACKEND_OBERON_ENABLED 1
 #endif
 // <q> NRF_CRYPTO_BACKEND_OBERON_CHACHA_POLY_ENABLED  - Enable the CHACHA-POLY mode using Oberon.
  
@@ -1276,6 +1280,15 @@
 #endif
 
 // </e>
+
+#ifndef NRF_CRYPTO_RNG_STATIC_MEMORY_BUFFERS_ENABLED
+#define NRF_CRYPTO_RNG_STATIC_MEMORY_BUFFERS_ENABLED 1
+#endif
+
+#ifndef NRF_CRYPTO_RNG_AUTO_INIT_ENABLED
+#define NRF_CRYPTO_RNG_AUTO_INIT_ENABLED 1
+#endif
+
 
 // </h> 
 //==========================================================
@@ -2984,7 +2997,7 @@
 // <e> NRFX_RNG_ENABLED - nrfx_rng - RNG peripheral driver
 //==========================================================
 #ifndef NRFX_RNG_ENABLED
-#define NRFX_RNG_ENABLED 0
+#define NRFX_RNG_ENABLED 1
 #endif
 // <q> NRFX_RNG_CONFIG_ERROR_CORRECTION  - Error correction
  
@@ -5165,7 +5178,7 @@
 // <e> RNG_ENABLED - nrf_drv_rng - RNG peripheral driver - legacy layer
 //==========================================================
 #ifndef RNG_ENABLED
-#define RNG_ENABLED 0
+#define RNG_ENABLED 1
 #endif
 // <q> RNG_CONFIG_ERROR_CORRECTION  - Error correction
  
@@ -6522,7 +6535,7 @@
  
 
 #ifndef CRC16_ENABLED
-#define CRC16_ENABLED 0
+#define CRC16_ENABLED 1
 #endif
 
 // <q> CRC32_ENABLED  - crc32 - CRC32 calculation routines
@@ -6542,7 +6555,7 @@
 // <e> FDS_ENABLED - fds - Flash data storage module
 //==========================================================
 #ifndef FDS_ENABLED
-#define FDS_ENABLED 0
+#define FDS_ENABLED 1
 #endif
 // <h> Pages - Virtual page settings
 
@@ -6773,7 +6786,7 @@
 // <e> MEM_MANAGER_ENABLED - mem_manager - Dynamic memory allocator
 //==========================================================
 #ifndef MEM_MANAGER_ENABLED
-#define MEM_MANAGER_ENABLED 0
+#define MEM_MANAGER_ENABLED 1
 #endif
 // <o> MEMORY_MANAGER_SMALL_BLOCK_COUNT - Size of each memory blocks identified as 'small' block.  <0-255> 
 
@@ -7066,7 +7079,7 @@
 // <e> NRF_FSTORAGE_ENABLED - nrf_fstorage - Flash abstraction library
 //==========================================================
 #ifndef NRF_FSTORAGE_ENABLED
-#define NRF_FSTORAGE_ENABLED 0
+#define NRF_FSTORAGE_ENABLED 1
 #endif
 // <h> nrf_fstorage - Common settings
 
@@ -7244,7 +7257,7 @@
 // <e> NRF_QUEUE_ENABLED - nrf_queue - Queue module
 //==========================================================
 #ifndef NRF_QUEUE_ENABLED
-#define NRF_QUEUE_ENABLED 0
+#define NRF_QUEUE_ENABLED 1
 #endif
 // <q> NRF_QUEUE_CLI_CMDS  - Enable CLI commands specific to the module
  

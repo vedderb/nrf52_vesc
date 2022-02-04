@@ -68,6 +68,9 @@ SRC_FILES += \
   $(SDK_ROOT)/components/libraries/atomic_flags/nrf_atflags.c \
   $(SDK_ROOT)/components/libraries/atomic/nrf_atomic.c \
   $(SDK_ROOT)/components/libraries/balloc/nrf_balloc.c \
+  $(SDK_ROOT)/components/libraries/fds/fds.c \
+  $(SDK_ROOT)/components/libraries/fstorage/nrf_fstorage.c \
+  $(SDK_ROOT)/components/libraries/fstorage/nrf_fstorage_sd.c \
   $(SDK_ROOT)/external/fprintf/nrf_fprintf.c \
   $(SDK_ROOT)/external/fprintf/nrf_fprintf_format.c \
   $(SDK_ROOT)/components/libraries/memobj/nrf_memobj.c \
@@ -101,21 +104,51 @@ SRC_FILES += \
   $(SDK_ROOT)/components/ble/common/ble_srv_common.c \
   $(SDK_ROOT)/components/ble/nrf_ble_gatt/nrf_ble_gatt.c \
   $(SDK_ROOT)/external/utf_converter/utf.c \
-  $(SDK_ROOT)/components/ble/ble_services/ble_nus/ble_nus.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_chacha_poly_aead.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_ecc.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_ecdh.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_ecdsa.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_eddsa.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_hash.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon/oberon_backend_hmac.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_ble.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_soc.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_twi.c \
   $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_twim.c \
   $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_twi.c \
+  $(SDK_ROOT)/integration/nrfx/legacy/nrf_drv_rng.c \
+  $(SDK_ROOT)/modules/nrfx/drivers/src/nrfx_rng.c \
+  $(SDK_ROOT)/components/libraries/queue/nrf_queue.c \
   $(SDK_ROOT)/components/ble/nrf_ble_qwr/nrf_ble_qwr.c \
+  $(SDK_ROOT)/components/ble/peer_manager/peer_data_storage.c \
+  $(SDK_ROOT)/components/ble/peer_manager/peer_database.c \
+  $(SDK_ROOT)/components/ble/peer_manager/peer_id.c \
+  $(SDK_ROOT)/components/ble/peer_manager/peer_manager.c \
+  $(SDK_ROOT)/components/ble/peer_manager/peer_manager_handler.c \
+  $(SDK_ROOT)/components/ble/peer_manager/pm_buffer.c \
+  $(SDK_ROOT)/components/ble/peer_manager/nrf_ble_lesc.c \
+  $(SDK_ROOT)/components/ble/peer_manager/security_dispatcher.c \
+  $(SDK_ROOT)/components/ble/peer_manager/security_manager.c \
+  $(SDK_ROOT)/components/ble/peer_manager/auth_status_tracker.c \
+  $(SDK_ROOT)/components/ble/peer_manager/gatt_cache_manager.c \
+  $(SDK_ROOT)/components/ble/peer_manager/gatts_cache_manager.c \
+  $(SDK_ROOT)/components/ble/peer_manager/id_manager.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/nrf_hw/nrf_hw_backend_rng.c \
+  $(SDK_ROOT)/components/libraries/crypto/backend/nrf_hw/nrf_hw_backend_rng_mbedtls.c \
+  $(SDK_ROOT)/components/libraries/crypto/nrf_crypto_init.c \
+  $(SDK_ROOT)/components/libraries/crypto/nrf_crypto_rng.c \
+  $(SDK_ROOT)/components/libraries/crypto/nrf_crypto_ecc.c \
+  $(SDK_ROOT)/components/libraries/crypto/nrf_crypto_ecdh.c \
   main.c \
   buffer.c \
   crc.c \
   packet.c \
   i2c_bb.c \
   sdk_mod/nrf_esb.c \
-  esb_timeslot.c
+  sdk_mod/ble_nus.c \
+  esb_timeslot.c \
+  storage.c
 
 # Include folders common to all targets
 INC_FOLDERS += \
@@ -169,7 +202,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/libraries/delay \
   $(SDK_ROOT)/components/libraries/csense_drv \
   $(SDK_ROOT)/components/libraries/memobj \
-  $(SDK_ROOT)/components/ble/ble_services/ble_nus_c \
   $(SDK_ROOT)/components/softdevice/common \
   $(SDK_ROOT)/components/ble/ble_services/ble_ias \
   $(SDK_ROOT)/components/libraries/usbd/class/hid/mouse \
@@ -209,7 +241,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/nfc/ndef/parser/record \
   $(SDK_ROOT)/modules/nrfx/mdk \
   $(SDK_ROOT)/components/ble/ble_link_ctx_manager \
-  $(SDK_ROOT)/components/ble/ble_services/ble_nus \
   $(SDK_ROOT)/components/libraries/twi_mngr \
   $(SDK_ROOT)/components/ble/ble_services/ble_hids \
   $(SDK_ROOT)/components/libraries/strerror \
@@ -250,11 +281,31 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/nfc/ndef/conn_hand_parser/ac_rec_parser \
   $(SDK_ROOT)/components/libraries/stack_guard \
   $(SDK_ROOT)/components/libraries/log/src \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon \
+  $(SDK_ROOT)/external/nrf_cc310/include \
+  $(SDK_ROOT)/external/nrf_oberon/include \
+  $(SDK_ROOT)/components/libraries/crypto/backend/oberon \
+  $(SDK_ROOT)/external/nrf_oberon \
+  $(SDK_ROOT)/components/libraries/ecc \
+  $(SDK_ROOT)/components/libraries/crypto/backend/micro_ecc \
+  $(SDK_ROOT)/external/nrf_cc310/include \
+  $(SDK_ROOT)/components/libraries/crypto/backend/cc310 \
+  $(SDK_ROOT)/components/libraries/crypto/backend/cc310_bl \
+  $(SDK_ROOT)/components/libraries/crypto/backend/mbedtls \
+  $(SDK_ROOT)/components/libraries/crypto/backend/optiga \
+  $(SDK_ROOT)/components/libraries/crypto/backend/nrf_hw \
+  $(SDK_ROOT)/components/libraries/crypto/backend/nrf_sw \
+  $(SDK_ROOT)/components/libraries/crypto/backend/mbedtls \
+  $(SDK_ROOT)/components/libraries/crypto/backend/cifra \
+  $(SDK_ROOT)/components/libraries/crypto \
+  $(SDK_ROOT)/components/libraries/stack_info \
+  $(SDK_ROOT)/external/micro-ecc/micro-ecc \
   . \
   sdk_mod \
 
 # Libraries common to all targets
 LIB_FILES += \
+  $(SDK_ROOT)/external/nrf_oberon/lib/cortex-m4/hard-float/liboberon_2.0.7.a
 
 # Optimization flags
 OPT = -O3 -g3
@@ -274,6 +325,10 @@ CFLAGS += -DNRF52840_XXAA
 endif
 CFLAGS += -DCONFIG_GPIO_AS_PINRESET
 CFLAGS += -DFLOAT_ABI_HARD
+CFLAGS += -DNRF52840_XXAA
+CFLAGS += -DNRF_APP_VERSION=0x00000001
+CFLAGS += -DNRF_APP_VERSION_ADDR=0x1D000
+CFLAGS += -DNRF_CRYPTO_MAX_INSTANCE_COUNT=1
 CFLAGS += -DNRF_SD_BLE_API_VERSION=6
 CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -DSWI_DISABLE0
@@ -305,6 +360,10 @@ ASMFLAGS += -mthumb -mabi=aapcs
 ASMFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 ASMFLAGS += -DCONFIG_GPIO_AS_PINRESET
 ASMFLAGS += -DFLOAT_ABI_HARD
+ASMFLAGS += -DNRF52840_XXAA
+ASMFLAGS += -DNRF_APP_VERSION=0x00000001
+ASMFLAGS += -DNRF_APP_VERSION_ADDR=0x1D000
+ASMFLAGS += -DNRF_CRYPTO_MAX_INSTANCE_COUNT=1
 ASMFLAGS += -DNRF_SD_BLE_API_VERSION=6
 ASMFLAGS += -DSOFTDEVICE_PRESENT
 ASMFLAGS += -DSWI_DISABLE0

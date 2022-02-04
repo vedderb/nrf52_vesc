@@ -1,5 +1,5 @@
 /*
-	Copyright 2019 Benjamin Vedder	benjamin@vedder.se
+	Copyright 2019 - 2022 Benjamin Vedder	benjamin@vedder.se
 
 	This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,6 +39,10 @@
 #include "nrf_pwr_mgmt.h"
 #include "bsp_btn_ble.h"
 #include "nrf_delay.h"
+#include "storage.h"
+#include "nrf_ble_lesc.h"
+#include "peer_manager.h"
+#include "peer_manager_handler.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -98,6 +102,17 @@
 #define DEVICE_NAME                     "VESC 52832 UART"
 #endif
 #endif
+
+#define SEC_PARAM_BOND                  1                                           /**< Perform bonding. */
+#define SEC_PARAM_MITM                  1                                           /**< Man In The Middle protection required (applicable when display module is detected). */
+#define SEC_PARAM_LESC                  1                                           /**< LE Secure Connections enabled. */
+#define SEC_PARAM_KEYPRESS              0                                           /**< Keypress notifications not enabled. */
+#define SEC_PARAM_IO_CAPABILITIES       BLE_GAP_IO_CAPS_DISPLAY_ONLY                /**< Display I/O capabilities. */
+#define SEC_PARAM_OOB                   0                                           /**< Out Of Band data not available. */
+#define SEC_PARAM_MIN_KEY_SIZE          7                                           /**< Minimum encryption key size. */
+#define SEC_PARAM_MAX_KEY_SIZE          16                                          /**< Maximum encryption key size. */
+
+static pm_peer_id_t m_peer_to_be_deleted = PM_PEER_ID_INVALID;
 
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -209,6 +224,7 @@ static volatile bool m_uart_error = false;
 static volatile int m_other_comm_disable_time = 0;
 static volatile int m_no_sleep_cnt = 0;
 static volatile int m_disconnect_cnt = 0;
+static volatile int m_reset_timer = 0;
 
 app_uart_comm_params_t m_uart_comm_params =
 {
@@ -228,6 +244,7 @@ app_uart_comm_params_t m_uart_comm_params =
 // Functions
 void ble_printf(const char* format, ...);
 static void set_enabled(bool en);
+static void start_advertising(void);
 #if USE_SLEEP
 static void go_to_sleep(void);
 #endif
@@ -243,9 +260,6 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 #define CDC_ACM_DATA_EPIN       NRF_DRV_USBD_EPIN1
 #define CDC_ACM_DATA_EPOUT      NRF_DRV_USBD_EPOUT1
 
-/**
- * @brief CDC_ACM class instance
- * */
 APP_USBD_CDC_ACM_GLOBAL_DEF(m_app_cdc_acm,
 		cdc_acm_user_ev_handler,
 		CDC_ACM_COMM_INTERFACE,
@@ -312,6 +326,53 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event) {
 }
 #endif
 
+static void pm_evt_handler(pm_evt_t const * p_evt) {
+	ret_code_t err_code;
+
+	pm_handler_on_pm_evt(p_evt);
+	pm_handler_disconnect_on_sec_failure(p_evt);
+	pm_handler_flash_clean(p_evt);
+
+	switch (p_evt->evt_id) {
+	case PM_EVT_CONN_SEC_SUCCEEDED: {
+		pm_conn_sec_status_t conn_sec_status;
+
+		// Check if the link is authenticated (meaning at least MITM).
+		err_code = pm_conn_sec_status_get(p_evt->conn_handle, &conn_sec_status);
+		APP_ERROR_CHECK(err_code);
+
+		if (conn_sec_status.mitm_protected) {
+
+		} else {
+			// The peer did not use MITM, disconnect.
+			err_code = pm_peer_id_get(m_conn_handle, &m_peer_to_be_deleted);
+			APP_ERROR_CHECK(err_code);
+			err_code = sd_ble_gap_disconnect(m_conn_handle,
+					BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+			APP_ERROR_CHECK(err_code);
+		}
+	} break;
+
+	case PM_EVT_CONN_SEC_FAILED:
+		m_conn_handle = BLE_CONN_HANDLE_INVALID;
+		break;
+
+	case PM_EVT_PEERS_DELETE_SUCCEEDED:
+		start_advertising();
+		break;
+
+	case PM_EVT_CONN_SEC_CONFIG_REQ: {
+		// Allow re-pairing
+		pm_conn_sec_config_t config = {.allow_repairing = true};
+		pm_conn_sec_config_reply(p_evt->conn_handle, &config);
+		break;
+	}
+
+	default:
+		break;
+	}
+}
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -323,23 +384,23 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event) {
  * @param[in] line_num    Line number of the failing ASSERT call.
  * @param[in] p_file_name File name of the failing ASSERT call.
  */
-void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
-{
+void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name) {
 	app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-static void gap_params_init(void)
-{
+static void gap_params_init(void) {
 	uint32_t                err_code;
 	ble_gap_conn_params_t   gap_conn_params;
 	ble_gap_conn_sec_mode_t sec_mode;
 
 	BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
 
-	err_code = sd_ble_gap_device_name_set(&sec_mode,
-			(const uint8_t *) DEVICE_NAME,
-			strlen(DEVICE_NAME));
-	APP_ERROR_CHECK(err_code);
+	char *dev_name = DEVICE_NAME;
+	if (m_config.name_set) {
+		dev_name = m_config.name;
+	}
+
+	sd_ble_gap_device_name_set(&sec_mode, (const uint8_t *)dev_name, strlen(DEVICE_NAME));
 
 	memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
@@ -350,6 +411,12 @@ static void gap_params_init(void)
 
 	err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
 	APP_ERROR_CHECK(err_code);
+
+	if (m_config.pin_set) {
+		ble_gap_opt_t gap_opt;
+		gap_opt.passkey.p_passkey = (uint8_t*)m_config.pin;
+		sd_ble_opt_set(BLE_GAP_OPT_PASSKEY,(const ble_opt_t *)&gap_opt);
+	}
 }
 
 static void start_advertising(void) {
@@ -357,16 +424,7 @@ static void start_advertising(void) {
 	sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, m_advertising.adv_handle, 8);
 }
 
-
-/**@brief Function for handling Queued Write Module errors.
- *
- * @details A pointer to this function will be passed to each service which may need to inform the
- *          application about an error.
- *
- * @param[in]   nrf_error   Error code containing information about what went wrong.
- */
-static void nrf_qwr_error_handler(uint32_t nrf_error)
-{
+static void nrf_qwr_error_handler(uint32_t nrf_error) {
 	APP_ERROR_HANDLER(nrf_error);
 }
 
@@ -376,41 +434,27 @@ static void nus_data_handler(ble_nus_evt_t * p_evt) {
 			packet_process_byte(p_evt->params.rx_data.p_data[i], PACKET_BLE);
 		}
 	}
-
 }
 
 static void services_init(void) {
-	uint32_t           err_code;
 	ble_nus_init_t     nus_init;
 	nrf_ble_qwr_init_t qwr_init = {0};
 
 	// Initialize Queued Write Module.
 	qwr_init.error_handler = nrf_qwr_error_handler;
-
-	err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
-	APP_ERROR_CHECK(err_code);
+	nrf_ble_qwr_init(&m_qwr, &qwr_init);
 
 	// Initialize NUS.
 	memset(&nus_init, 0, sizeof(nus_init));
-
 	nus_init.data_handler = nus_data_handler;
-
-	err_code = ble_nus_init(&m_nus, &nus_init);
-	APP_ERROR_CHECK(err_code);
+	ble_nus_init(&m_nus, &nus_init, m_config.pin_set);
 }
 
-/**@brief Function for handling errors from the Connection Parameters module.
- *
- * @param[in] nrf_error  Error code containing information about what went wrong.
- */
 static void conn_params_error_handler(uint32_t nrf_error) {
 	APP_ERROR_HANDLER(nrf_error);
 }
 
-/**@brief Function for initializing the Connection Parameters module.
- */
 static void conn_params_init(void) {
-	uint32_t               err_code;
 	ble_conn_params_init_t cp_init;
 
 	memset(&cp_init, 0, sizeof(cp_init));
@@ -424,16 +468,9 @@ static void conn_params_init(void) {
 	cp_init.evt_handler                    = NULL;
 	cp_init.error_handler                  = conn_params_error_handler;
 
-	err_code = ble_conn_params_init(&cp_init);
-	APP_ERROR_CHECK(err_code);
+	ble_conn_params_init(&cp_init);
 }
 
-/**@brief Function for handling advertising events.
- *
- * @details This function will be called for advertising events which are passed to the application.
- *
- * @param[in] ble_adv_evt  Advertising event.
- */
 static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 	switch (ble_adv_evt) {
 	case BLE_ADV_EVT_FAST:
@@ -456,15 +493,15 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 	}
 }
 
-/**@brief Function for handling BLE events.
- *
- * @param[in]   p_ble_evt   Bluetooth stack event.
- * @param[in]   p_context   Unused.
- */
 static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
+	if (m_config.pin_set) {
+		pm_handler_secure_on_connection(p_ble_evt);
+	}
+
 	switch (p_ble_evt->header.evt_id) {
 	case BLE_GAP_EVT_CONNECTED:
 		LED_ON();
+		m_peer_to_be_deleted = PM_PEER_ID_INVALID;
 		m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
 		nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
 		sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_CONN, m_conn_handle, 8);
@@ -474,6 +511,10 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 		LED_OFF();
 		m_conn_handle = BLE_CONN_HANDLE_INVALID;
 		m_disconnect_cnt = 100;
+		if (m_peer_to_be_deleted != PM_PEER_ID_INVALID) {
+			pm_peer_delete(m_peer_to_be_deleted);
+			m_peer_to_be_deleted = PM_PEER_ID_INVALID;
+		}
 		break;
 
 	case BLE_GAP_EVT_PHY_UPDATE_REQUEST: {
@@ -487,7 +528,9 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 
 	case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
 		// Pairing not supported
-		sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
+		if (!m_config.pin_set) {
+			sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
+		}
 		break;
 
 	case BLE_GATTS_EVT_SYS_ATTR_MISSING:
@@ -511,11 +554,6 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context) {
 	}
 }
 
-
-/**@brief Function for the SoftDevice initialization.
- *
- * @details This function initializes the SoftDevice and the BLE event interrupt.
- */
 static void ble_stack_init(void) {
 	nrf_sdh_enable_request();
 
@@ -539,13 +577,8 @@ void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, nrf_ble_gatt_evt_t const * p_evt)
 }
 
 void gatt_init(void) {
-	ret_code_t err_code;
-
-	err_code = nrf_ble_gatt_init(&m_gatt, gatt_evt_handler);
-	APP_ERROR_CHECK(err_code);
-
-	err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, NRF_SDH_BLE_GATT_MAX_MTU_SIZE);
-	APP_ERROR_CHECK(err_code);
+	nrf_ble_gatt_init(&m_gatt, gatt_evt_handler);
+	nrf_ble_gatt_att_mtu_periph_set(&m_gatt, NRF_SDH_BLE_GATT_MAX_MTU_SIZE);
 }
 
 void uart_event_handle(app_uart_evt_t * p_event) {
@@ -568,6 +601,30 @@ void uart_event_handle(app_uart_evt_t * p_event) {
 	default:
 		break;
 	}
+}
+
+static void peer_manager_init(void) {
+    pm_init();
+
+    ble_gap_sec_params_t sec_param;
+    memset(&sec_param, 0, sizeof(ble_gap_sec_params_t));
+
+    // Security parameters to be used for all security procedures.
+    sec_param.bond           = SEC_PARAM_BOND;
+    sec_param.mitm           = SEC_PARAM_MITM;
+    sec_param.lesc           = SEC_PARAM_LESC;
+    sec_param.keypress       = SEC_PARAM_KEYPRESS;
+    sec_param.io_caps        = SEC_PARAM_IO_CAPABILITIES;
+    sec_param.oob            = SEC_PARAM_OOB;
+    sec_param.min_key_size   = SEC_PARAM_MIN_KEY_SIZE;
+    sec_param.max_key_size   = SEC_PARAM_MAX_KEY_SIZE;
+    sec_param.kdist_own.enc  = 1;
+    sec_param.kdist_own.id   = 1;
+    sec_param.kdist_peer.enc = 1;
+    sec_param.kdist_peer.id  = 1;
+
+    pm_sec_params_set(&sec_param);
+    pm_register(pm_evt_handler);
 }
 
 static void uart_init(void) {
@@ -681,6 +738,41 @@ static void process_packet_vesc(unsigned char *data, unsigned int len) {
 		rfhelp_send_data_crc(data + 1, len - 1);
 	} else if (data[0] == COMM_EXT_NRF_SET_ENABLED) {
 		set_enabled(data[1]);
+	} else if (data[0] == COMM_SET_BLE_NAME) {
+		if (len > 3 && len <= 30) {
+			memcpy(m_config.name, data + 1, len - 1);
+			m_config.name[len] = '\0';
+			m_config.name_set = 1;
+			m_reset_timer = 3000;
+		} else {
+			if (m_config.name_set) {
+				m_reset_timer = 3000;
+			}
+
+			m_config.name_set = 0;
+		}
+		storage_save_config();
+	} else if (data[0] == COMM_SET_BLE_PIN) {
+		if (len == 7 &&
+				data[1] >= '0' && data[1] <= '9' &&
+				data[2] >= '0' && data[2] <= '9' &&
+				data[3] >= '0' && data[3] <= '9' &&
+				data[4] >= '0' && data[4] <= '9' &&
+				data[5] >= '0' && data[5] <= '9' &&
+				data[6] >= '0' && data[6] <= '9') {
+			memcpy(m_config.pin, data + 1, len - 1);
+			m_config.pin[len] = '\0';
+			m_config.pin_set = 1;
+			m_reset_timer = 3000;
+		} else {
+			if (m_config.pin_set) {
+				pm_peers_delete();
+				m_reset_timer = 3000;
+			}
+
+			m_config.pin_set = 0;
+		}
+		storage_save_config();
 	} else {
 		if (m_is_enabled) {
 			packet_send_packet(data, len, PACKET_BLE);
@@ -739,6 +831,13 @@ static void packet_timer_handler(void *p_context) {
 	(void)p_context;
 	packet_timerfunc();
 
+	if (m_reset_timer > 0) {
+		m_reset_timer--;
+		if (m_reset_timer == 0) {
+			NVIC_SystemReset();
+		}
+	}
+
 	CRITICAL_REGION_ENTER();
 	if (m_other_comm_disable_time > 0) {
 		m_other_comm_disable_time--;
@@ -766,10 +865,11 @@ static void nrf_timer_handler(void *p_context) {
 #endif
 
 	if (m_other_comm_disable_time == 0) {
-		uint8_t buffer[1];
+		uint8_t buffer[2];
 		buffer[0] = COMM_EXT_NRF_PRESENT;
+		buffer[1] = 3; // Indicate name and pin code update is supported
 		CRITICAL_REGION_ENTER();
-		packet_send_packet(buffer, 1, PACKET_VESC);
+		packet_send_packet(buffer, 2, PACKET_VESC);
 		CRITICAL_REGION_EXIT();
 	}
 
@@ -860,6 +960,7 @@ int main(void) {
 	NRF_WDT->RREN |= WDT_RREN_RR0_Msk;
 	NRF_WDT->TASKS_START = 1;
 
+	storage_init();
 	uart_init();
 	app_timer_init();
 	nrf_pwr_mgmt_init();
@@ -869,6 +970,10 @@ int main(void) {
 	services_init();
 	advertising_init();
 	conn_params_init();
+
+	if (m_config.pin_set) {
+		peer_manager_init();
+	}
 
 	(void)set_enabled;
 
@@ -911,6 +1016,11 @@ int main(void) {
 		__set_FPSCR(__get_FPSCR()  & ~(0x0000009F));
 		(void)__get_FPSCR();
 		NVIC_ClearPendingIRQ(FPU_IRQn);
+		
+		if (m_config.pin_set) {
+			nrf_ble_lesc_request_handler();
+		}
+
 		sd_app_evt_wait();
 
 		// Reload watchdog
