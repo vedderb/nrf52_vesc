@@ -753,15 +753,15 @@ static void process_packet_vesc(unsigned char *data, unsigned int len) {
 		}
 		storage_save_config();
 	} else if (data[0] == COMM_SET_BLE_PIN) {
-		if (len == 7 &&
+		if (len >= 7 &&
 				data[1] >= '0' && data[1] <= '9' &&
 				data[2] >= '0' && data[2] <= '9' &&
 				data[3] >= '0' && data[3] <= '9' &&
 				data[4] >= '0' && data[4] <= '9' &&
 				data[5] >= '0' && data[5] <= '9' &&
 				data[6] >= '0' && data[6] <= '9') {
-			memcpy(m_config.pin, data + 1, len - 1);
-			m_config.pin[len] = '\0';
+			memcpy(m_config.pin, data + 1, 6);
+			m_config.pin[7] = '\0';
 			m_config.pin_set = 1;
 			m_reset_timer = 3000;
 		} else {
