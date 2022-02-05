@@ -400,7 +400,7 @@ static void gap_params_init(void) {
 		dev_name = m_config.name;
 	}
 
-	sd_ble_gap_device_name_set(&sec_mode, (const uint8_t *)dev_name, strlen(DEVICE_NAME));
+	sd_ble_gap_device_name_set(&sec_mode, (const uint8_t *)dev_name, strlen(dev_name));
 
 	memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
