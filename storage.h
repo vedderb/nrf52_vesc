@@ -23,7 +23,7 @@
 #include "datatypes.h"
 
 // Global variables
-config_data m_config;
+extern config_data m_config;
 
 // Functions
 void storage_init(void);
