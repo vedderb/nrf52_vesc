@@ -68,8 +68,12 @@
 #include "esb_timeslot.h"
 #include "crc.h"
 
+#ifndef MODULE_XIAO_BLE
+#define MODULE_XIAO_BLE					1
+#endif
+
 #ifndef MODULE_BUILTIN
-#define MODULE_BUILTIN					1
+#define MODULE_BUILTIN					0
 #endif
 
 #ifndef MODULE_RD2
@@ -84,7 +88,9 @@
 #define USE_USB							0
 
 #ifdef NRF52840_XXAA
-#if MODULE_BUILTIN
+#if MODULE_XIAO_BLE
+#define DEVICE_NAME                     "Seeed Studio XIAO nRF52840"
+#elif MODULE_BUILTIN
 #define DEVICE_NAME                     "VESC 52840 BUILTIN"
 #elif MODULE_RD2
 #define DEVICE_NAME                     "VESC RAD2"
@@ -147,22 +153,34 @@ static pm_peer_id_t m_peer_to_be_deleted = PM_PEER_ID_INVALID;
 #define LED_ON()						nrf_gpio_pin_set(LED_PIN)
 #define LED_OFF()						nrf_gpio_pin_clear(LED_PIN)
 
+
 #ifdef NRF52840_XXAA
-#if MODULE_BUILTIN
+
+#if MODULE_XIAO_BLE
+#define UART_RX							NRF_GPIO_PIN_MAP(1, 12) //P1.12
+#define UART_TX							NRF_GPIO_PIN_MAP(1, 11) //P1.11
+#define UART_TX_DISABLED				2
+#define LED_PIN							NRF_GPIO_PIN_MAP(0, 30) //Green LED, P0.30
+								//NRF_GPIO_PIN_MAP(0, 6) //Blue LED, P0.06
+								//NRF_GPIO_PIN_MAP(0, 26) //Red LED, P0.26
+#elif MODULE_BUILTIN
 #define UART_RX							26
 #define UART_TX							25
 #define UART_TX_DISABLED				28
-#define LED_PIN							27
+#define LED_PIN						27
+
 #elif MODULE_RD2
 #define UART_RX							11
 #define UART_TX							12
 #define UART_TX_DISABLED				18
 #define LED_PIN							15
+
 #elif MODULE_STORMCORE
 #define UART_RX							31
 #define UART_TX							30
 #define UART_TX_DISABLED				29
 #define LED_PIN							5
+
 #elif MODULE_RD_BMS
 #define UART_RX							4
 #define UART_TX							5
@@ -172,12 +190,14 @@ static pm_peer_id_t m_peer_to_be_deleted = PM_PEER_ID_INVALID;
 #undef LED_OFF
 #define LED_ON()						nrf_gpio_pin_set(NRF_GPIO_PIN_MAP(1, 1)); nrf_gpio_pin_clear(LED_PIN)
 #define LED_OFF()						nrf_gpio_pin_set(LED_PIN)
+
 #else
 #define UART_RX							11
 #define UART_TX							8
 #define UART_TX_DISABLED				25
 #define LED_PIN							7
 #endif
+
 #else
 #if MODULE_BUILTIN
 #define UART_RX							6
@@ -186,6 +206,7 @@ static pm_peer_id_t m_peer_to_be_deleted = PM_PEER_ID_INVALID;
 #define EN_DEFAULT						1
 #define LED_PIN							8
 #define LED_PIN2_INV					5
+
 #else
 #define UART_RX							7
 #define UART_TX							6
